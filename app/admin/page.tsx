@@ -1,0 +1,811 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Header from '@/components/Header'
+import { supabase } from '@/lib/supabaseClient'
+import {
+  LayoutDashboard, ShoppingBag, Home as HomeIcon, Bike, CalendarDays, Image as ImageIcon, Users, FileBarChart, Upload, X, Video, AlertCircle,
+} from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+
+const ADMIN_ID = '6a78cbff-de79-466f-9c81-9001252c3f5e'
+
+type FieldConfig = { key: string; label: string; type?: 'text' | 'number' | 'checkbox' | 'textarea' }
+
+const CRUD_TABS = [
+  { key: 'listings', label: 'Listings', icon: ShoppingBag, table: 'listings', titleField: 'title', subField: 'location_text',
+    imageMode: 'gallery', imagesTable: 'listing_images', imagesFk: 'listing_id', hasVideo: true,
+    fields: [
+      { key: 'title', label: 'Title' },
+      { key: 'category', label: 'Category' },
+      { key: 'price', label: 'Price', type: 'number' },
+      { key: 'condition', label: 'Condition' },
+      { key: 'description', label: 'Description', type: 'textarea' },
+      { key: 'location_text', label: 'Location' },
+    ] as FieldConfig[] },
+  { key: 'pg', label: 'PG & Hostels', icon: HomeIcon, table: 'pg_listings', titleField: 'name', subField: 'location_text',
+    imageMode: 'gallery', imagesTable: 'pg_images', imagesFk: 'pg_id', hasVideo: true,
+    fields: [
+      { key: 'name', label: 'Name' },
+      { key: 'rent', label: 'Rent (per month)', type: 'number' },
+      { key: 'distance_km', label: 'Distance (e.g. 1.2 km from college)' },
+      { key: 'room_type', label: 'Room type' },
+      { key: 'food_available', label: 'Food available', type: 'checkbox' },
+      { key: 'facilities', label: 'Facilities (comma separated)' },
+      { key: 'location_text', label: 'Location' },
+      { key: 'phone', label: 'Phone' },
+    ] as FieldConfig[] },
+  { key: 'bikes', label: 'Bike Rentals', icon: Bike, table: 'bike_listings', titleField: 'vehicle_type', subField: 'provider_name',
+    imageMode: 'gallery', imagesTable: 'bike_images', imagesFk: 'bike_id', hasVideo: true,
+    fields: [
+      { key: 'vehicle_type', label: 'Vehicle type' },
+      { key: 'price_per_day', label: 'Price per day', type: 'number' },
+      { key: 'provider_name', label: 'Provider name' },
+      { key: 'phone', label: 'Phone' },
+      { key: 'location_text', label: 'Location' },
+    ] as FieldConfig[] },
+  { key: 'events', label: 'Events', icon: CalendarDays, table: 'events', titleField: 'title', subField: 'venue', hasImage: true, hasVideo: true, geocodeFrom: 'venue',
+    fields: [
+      { key: 'title', label: 'Title' },
+      { key: 'description', label: 'Description', type: 'textarea' },
+      { key: 'venue', label: 'Venue' },
+      { key: 'location_url', label: 'Google Maps link (Share → Copy link from Google Maps)' },
+      { key: 'event_date', label: 'Date (e.g. 18 Oct)' },
+      { key: 'event_time', label: 'Time (e.g. 7:00 PM)' },
+      { key: 'price_info', label: 'Price info (e.g. ₹200 or Free)' },
+      { key: 'organizer_phone', label: 'Organizer phone (for WhatsApp registration)' },
+    ] as FieldConfig[] },
+  { key: 'banners', label: 'Banners', icon: ImageIcon, table: 'banners', titleField: 'title', subField: 'link_url', hasImage: true,
+    fields: [
+      { key: 'title', label: 'Title' },
+      { key: 'subtitle', label: 'Subtitle' },
+      { key: 'link_url', label: 'Link (e.g. /bikes)' },
+      { key: 'bg_color', label: 'Background color (e.g. #14161A)' },
+      { key: 'sort_order', label: 'Order (1, 2, 3...)', type: 'number' },
+    ] as FieldConfig[] },
+]
+
+const NAV = [
+  { key: 'overview', label: 'Overview', icon: LayoutDashboard },
+  ...CRUD_TABS,
+  { key: 'users', label: 'Users', icon: Users },
+  { key: 'reports', label: 'Reports', icon: FileBarChart },
+]
+
+export default function AdminPage() {
+  const router = useRouter()
+  const [checking, setChecking] = useState(true)
+  const [allowed, setAllowed] = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')
+
+  useEffect(() => {
+    async function check() {
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user || userData.user.id !== ADMIN_ID) {
+        router.push('/')
+        return
+      }
+      setAllowed(true)
+      setChecking(false)
+    }
+    check()
+  }, [router])
+
+  if (checking) return <main><p style={{ padding: '2rem' }}>Checking access...</p></main>
+  if (!allowed) return null
+
+  const crudTab = CRUD_TABS.find((t) => t.key === activeTab)
+
+  return (
+    <main className="min-h-screen bg-[#F7F7F9] text-[#14161A]">
+      <div className="border-b border-[#E5E7EB] bg-white px-6 py-3">
+        <a href="/" className="text-sm font-medium text-[#6B7280] hover:text-[#FF5A36]">← Back to site</a>
+      </div>
+      <div className="mx-auto flex max-w-7xl gap-6 px-6 py-8">
+        <aside className="w-56 shrink-0">
+          <div className="mb-4 rounded-2xl bg-[#14161A] p-4 text-white">
+            <p className="text-xs font-semibold uppercase tracking-wider text-white/60">Zwoop</p>
+            <p className="text-lg font-bold">Admin Panel</p>
+          </div>
+          <nav className="flex flex-col gap-1 rounded-2xl border border-[#E5E7EB] bg-white p-2">
+            {NAV.map((item) => {
+              const Icon = item.icon
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => setActiveTab(item.key)}
+                  className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
+                    activeTab === item.key ? 'bg-[#FFF1EC] text-[#FF5A36]' : 'hover:bg-[#F7F7F9]'
+                  }`}
+                >
+                  <Icon size={16} /> {item.label}
+                </button>
+              )
+            })}
+          </nav>
+        </aside>
+
+        <div className="min-w-0 flex-1">
+          {activeTab === 'overview' && <OverviewPanel onGoToListings={() => setActiveTab('listings')} />}
+          {activeTab === 'users' && <UsersPanel />}
+          {activeTab === 'reports' && <ReportsPanel />}
+          {activeTab === 'banners' && <AdminPage />}
+          {crudTab && crudTab.key !== 'banners' && (() => {
+            const { key, icon, ...sectionProps } = crudTab
+            return <AdminSection key={key} {...sectionProps} />
+          })()}
+        </div>
+      </div>
+    </main>
+  )
+}
+
+function StatCard({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
+      <p className="text-2xl font-extrabold">{value}</p>
+      <p className="text-sm text-[#6B7280]">{label}</p>
+    </div>
+  )
+}
+
+function OverviewPanel({ onGoToListings }: { onGoToListings: () => void }) {
+  const [stats, setStats] = useState<any>(null)
+  const [signupData, setSignupData] = useState<any[]>([])
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    const [users, listings, pending, pgs, bikes, events, banners] = await Promise.all([
+      supabase.from('profiles').select('*', { count: 'exact', head: true }),
+      supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'live'),
+      supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabase.from('pg_listings').select('*', { count: 'exact', head: true }).eq('status', 'live'),
+      supabase.from('bike_listings').select('*', { count: 'exact', head: true }).eq('status', 'live'),
+      supabase.from('events').select('*', { count: 'exact', head: true }).eq('status', 'live'),
+      supabase.from('banners').select('*', { count: 'exact', head: true }).eq('status', 'live'),
+    ])
+
+    setStats({
+      users: users.count || 0, listings: listings.count || 0, pending: pending.count || 0, pgs: pgs.count || 0,
+      bikes: bikes.count || 0, events: events.count || 0, banners: banners.count || 0,
+    })
+
+    const { data: profiles } = await supabase.from('profiles').select('created_at')
+    const days: any = {}
+    const today = new Date()
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today)
+      d.setDate(d.getDate() - i)
+      days[d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })] = 0
+    }
+    profiles?.forEach((p: any) => {
+      const label = new Date(p.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+      if (label in days) days[label]++
+    })
+    setSignupData(Object.entries(days).map(([day, count]) => ({ day, signups: count })))
+  }
+
+  if (!stats) return <p className="text-sm text-[#6B7280]">Loading...</p>
+
+  return (
+    <div>
+      <h1 className="mb-1 text-2xl font-bold">Overview</h1>
+      <p className="mb-6 text-sm text-[#6B7280]">A quick look at what's live on Zwoop right now.</p>
+
+      {stats.pending > 0 && (
+        <button onClick={onGoToListings} className="mb-6 flex w-full items-center justify-between rounded-2xl border border-[#FF5A36] bg-[#FFF7F5] p-4 text-left">
+          <span className="flex items-center gap-2 text-sm font-semibold text-[#FF5A36]">
+            <AlertCircle size={18} /> {stats.pending} listing{stats.pending === 1 ? '' : 's'} waiting for review
+          </span>
+          <span className="text-sm font-semibold text-[#FF5A36]">Review now →</span>
+        </button>
+      )}
+
+      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+        <StatCard label="Students" value={stats.users} />
+        <StatCard label="Listings" value={stats.listings} />
+        <StatCard label="PGs" value={stats.pgs} />
+        <StatCard label="Bikes" value={stats.bikes} />
+        <StatCard label="Events" value={stats.events} />
+        <StatCard label="Banners" value={stats.banners} />
+      </div>
+
+      <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
+        <p className="mb-4 text-sm font-semibold">New signups, last 7 days</p>
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={signupData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+            <XAxis dataKey="day" tick={{ fontSize: 12 }} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+            <Tooltip />
+            <Bar dataKey="signups" fill="#FF5A36" radius={[6, 6, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
+function UsersPanel() {
+  const [users, setUsers] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.from('profiles').select('*').order('created_at', { ascending: false }).then(({ data }) => {
+      setUsers(data || [])
+      setLoading(false)
+    })
+  }, [])
+
+  return (
+    <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
+      <h1 className="mb-1 text-2xl font-bold">Users</h1>
+      <p className="mb-6 text-sm text-[#6B7280]">Everyone who has signed up.</p>
+
+      {loading ? (
+        <p className="text-sm text-[#6B7280]">Loading...</p>
+      ) : users.length === 0 ? (
+        <p className="text-sm text-[#6B7280]">No users yet.</p>
+      ) : (
+        <div className="flex flex-col divide-y divide-[#E5E7EB]">
+          {users.map((u) => (
+            <div key={u.id} className="flex items-center justify-between py-3">
+              <div>
+                <p className="text-sm font-semibold">{u.name}</p>
+                <p className="text-xs text-[#6B7280]">{u.course} · Year {u.year} · {u.phone || 'no phone'}</p>
+              </div>
+              <p className="text-xs text-[#6B7280]">Joined {new Date(u.created_at).toLocaleDateString('en-IN')}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function downloadCSV(rows: any[], filename: string) {
+  if (!rows || rows.length === 0) return
+  const headers = Object.keys(rows[0])
+  const csv = [
+    headers.join(','),
+    ...rows.map((row) => headers.map((h) => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(',')),
+  ].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function ReportsPanel() {
+  const [categoryData, setCategoryData] = useState<any[]>([])
+
+  useEffect(() => {
+    supabase.from('listings').select('category').eq('status', 'live').then(({ data }) => {
+      const counts: any = {}
+      data?.forEach((row: any) => { counts[row.category] = (counts[row.category] || 0) + 1 })
+      setCategoryData(Object.entries(counts).map(([category, count]) => ({ category, count })))
+    })
+  }, [])
+
+  async function exportTable(table: string) {
+    const { data } = await supabase.from(table).select('*')
+    downloadCSV(data || [], `${table}.csv`)
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
+        <h1 className="mb-1 text-2xl font-bold">Reports</h1>
+        <p className="mb-6 text-sm text-[#6B7280]">A breakdown of what's on the site.</p>
+
+        <p className="mb-3 text-sm font-semibold">Listings by category</p>
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={categoryData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+            <XAxis dataKey="category" tick={{ fontSize: 11 }} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+            <Tooltip />
+            <Bar dataKey="count" fill="#14161A" radius={[6, 6, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
+        <p className="mb-1 text-sm font-semibold">Export data</p>
+        <p className="mb-4 text-sm text-[#6B7280]">Download any table as a spreadsheet-ready file.</p>
+        <div className="flex flex-wrap gap-2">
+          {['listings', 'pg_listings', 'bike_listings', 'events', 'banners', 'profiles'].map((t) => (
+            <button key={t} onClick={() => exportTable(t)} className="rounded-full border border-[#E5E7EB] px-4 py-2 text-sm font-medium hover:border-[#FF5A36] hover:text-[#FF5A36]">
+              {t}.csv
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type GalleryItem = { url?: string; file?: File; preview?: string }
+
+function AdminSection({
+  table, titleField, subField, fields, hasImage, hasVideo, imageMode, imagesTable, imagesFk, geocodeFrom,
+}: {
+  table: string; titleField: string; subField: string; fields: FieldConfig[]
+  hasImage?: boolean; hasVideo?: boolean
+  imageMode?: string; imagesTable?: string; imagesFk?: string
+  geocodeFrom?: string
+}) {
+  const [rows, setRows] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [formData, setFormData] = useState<any>({})
+  const [file, setFile] = useState<File | null>(null)
+  const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([])
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => { load() }, [table])
+
+  async function load() {
+    setLoading(true)
+    const { data, error } = await supabase.from(table).select('*').order('created_at', { ascending: false })
+    if (error) setMessage(error.message)
+    setRows(data || [])
+    setLoading(false)
+  }
+
+  function blankForm() {
+    const blank: any = {}
+    fields.forEach((f) => { blank[f.key] = f.type === 'checkbox' ? false : '' })
+    return blank
+  }
+
+  function startAdd() {
+    setFormData(blankForm()); setEditingId(null); setFile(null); setVideoFile(null); setGalleryItems([]); setMessage(''); setShowForm(true)
+  }
+
+  async function startEdit(row: any) {
+    const data: any = {}
+    fields.forEach((f) => { data[f.key] = row[f.key] })
+    setFormData(data); setEditingId(row.id); setFile(null); setVideoFile(null); setMessage('')
+
+    if (imageMode === 'gallery' && imagesTable && imagesFk) {
+      const { data: imgs } = await supabase.from(imagesTable).select('url').eq(imagesFk, row.id).order('sort_order')
+      setGalleryItems((imgs || []).map((i: any) => ({ url: i.url })))
+    } else {
+      setGalleryItems([])
+    }
+
+    setShowForm(true)
+  }
+
+  function updateField(key: string, value: any) {
+    setFormData((prev: any) => ({ ...prev, [key]: value }))
+  }
+
+  function addGalleryFiles(e: any) {
+    const picked = Array.from(e.target.files || []) as File[]
+    const withPreviews = picked.map((f) => ({ file: f, preview: URL.createObjectURL(f) }))
+    setGalleryItems([...galleryItems, ...withPreviews].slice(0, 4))
+    e.target.value = ''
+  }
+
+  function removeGalleryItem(i: number) {
+    setGalleryItems(galleryItems.filter((_, idx) => idx !== i))
+  }
+
+  async function handleSubmit(e: any) {
+    e.preventDefault()
+    setSaving(true)
+    setMessage('')
+
+    const payload: any = {}
+    fields.forEach((f) => { payload[f.key] = f.type === 'number' ? Number(formData[f.key] || 0) : formData[f.key] })
+
+    if (geocodeFrom && formData[geocodeFrom]) {
+      try {
+        const res = await fetch(`/api/geocode?q=${encodeURIComponent(formData[geocodeFrom] + ' India')}`)
+        const geo = await res.json()
+        if (geo.lat && geo.lng) {
+          payload.lat = geo.lat
+          payload.lng = geo.lng
+        }
+      } catch {
+        // if the lookup fails, the event still saves fine — just without distance sorting
+      }
+    }
+
+    let galleryUrls: string[] = []
+
+    if (imageMode === 'gallery') {
+      for (const item of galleryItems) {
+        if (item.url) { galleryUrls.push(item.url); continue }
+        if (item.file) {
+          const safeName = item.file.name.replace(/[^a-zA-Z0-9.]/g, '_')
+          const fileName = `${table}-${Date.now()}-${safeName}`
+          const { error: uploadError } = await supabase.storage.from('listing-images').upload(fileName, item.file)
+          if (uploadError) { setMessage('Image upload failed: ' + uploadError.message); setSaving(false); return }
+          const { data: urlData } = supabase.storage.from('listing-images').getPublicUrl(fileName)
+          galleryUrls.push(urlData.publicUrl)
+        }
+      }
+      payload.image_url = galleryUrls[0] || ''
+    } else if (hasImage && file) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, '_')
+      const fileName = `${table}-${Date.now()}-${safeName}`
+      const { error: uploadError } = await supabase.storage.from('listing-images').upload(fileName, file)
+      if (uploadError) { setMessage('Image upload failed: ' + uploadError.message); setSaving(false); return }
+      const { data: urlData } = supabase.storage.from('listing-images').getPublicUrl(fileName)
+      payload.image_url = urlData.publicUrl
+    }
+
+    if (hasVideo && videoFile) {
+      const safeName = videoFile.name.replace(/[^a-zA-Z0-9.]/g, '_')
+      const fileName = `${table}-video-${Date.now()}-${safeName}`
+      const { error: uploadError } = await supabase.storage.from('listing-images').upload(fileName, videoFile)
+      if (uploadError) { setMessage('Video upload failed: ' + uploadError.message); setSaving(false); return }
+      const { data: urlData } = supabase.storage.from('listing-images').getPublicUrl(fileName)
+      payload.video_url = urlData.publicUrl
+    }
+
+    let rowId = editingId
+
+    if (editingId) {
+      const { error } = await supabase.from(table).update(payload).eq('id', editingId)
+      if (error) { setMessage(error.message); setSaving(false); return }
+    } else {
+      payload.status = 'live'
+      if (table !== 'banners') payload.college_id = 1
+      if (table === 'listings') payload.seller_id = ADMIN_ID
+      const { data: inserted, error } = await supabase.from(table).insert(payload).select().single()
+      if (error) { setMessage(error.message); setSaving(false); return }
+      rowId = inserted.id
+    }
+
+    if (imageMode === 'gallery' && imagesTable && imagesFk && rowId) {
+      await supabase.from(imagesTable).delete().eq(imagesFk, rowId)
+      if (galleryUrls.length > 0) {
+        const galleryRows = galleryUrls.map((url, i) => ({ [imagesFk]: rowId, url, sort_order: i }))
+        await supabase.from(imagesTable).insert(galleryRows)
+      }
+    }
+
+    setSaving(false); setShowForm(false); load()
+  }
+
+  async function setStatus(row: any, newStatus: string) {
+    const { error } = await supabase.from(table).update({ status: newStatus }).eq('id', row.id)
+    if (error) setMessage(error.message)
+    load()
+  }
+
+  return (
+    <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-sm font-semibold text-[#6B7280]">{rows.length} total</p>
+        {!showForm && (
+          <button onClick={startAdd} className="rounded-full bg-[#FF5A36] px-4 py-2 text-sm font-semibold text-white">+ Add new</button>
+        )}
+      </div>
+
+      {message && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{message}</p>}
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="mb-6 flex flex-col gap-4 rounded-xl border border-[#E5E7EB] p-4">
+          <p className="text-sm font-semibold">{editingId ? 'Edit' : 'Add new'}</p>
+
+          {fields.map((f) => (
+            <div key={f.key}>
+              {f.type === 'checkbox' ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={!!formData[f.key]} onChange={(e) => updateField(f.key, e.target.checked)} />
+                  {f.label}
+                </label>
+              ) : f.type === 'textarea' ? (
+                <textarea placeholder={f.label} value={formData[f.key] || ''} onChange={(e) => updateField(f.key, e.target.value)} className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm" required />
+              ) : (
+                <input type={f.type === 'number' ? 'number' : 'text'} placeholder={f.label} value={formData[f.key] || ''} onChange={(e) => updateField(f.key, e.target.value)} className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm" required />
+              )}
+            </div>
+          ))}
+
+          {imageMode === 'gallery' && (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-semibold">Photos</p>
+                <p className="text-xs text-[#6B7280]">Up to 4 photos</p>
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                {galleryItems.map((item, i) => (
+                  <div key={i} className="relative">
+                    <img src={item.preview || item.url} alt={`Photo ${i + 1}`} className="h-20 w-full rounded-xl object-cover" />
+                    <button type="button" onClick={() => removeGalleryItem(i)} className="absolute -right-2 -top-2 rounded-full bg-[#14161A] p-1 text-white">
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {galleryItems.length < 4 && (
+                  <label className="flex h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#E5E7EB] text-center hover:border-[#FF5A36]">
+                    <Upload size={16} className="text-[#FF5A36]" />
+                    <span className="text-xs font-semibold text-[#FF5A36]">Add photo</span>
+                    <input type="file" accept="image/*" multiple onChange={addGalleryFiles} className="hidden" />
+                  </label>
+                )}
+              </div>
+            </div>
+          )}
+
+          {imageMode !== 'gallery' && hasImage && (
+            <div>
+              <label className="mb-1 block text-xs text-[#6B7280]">
+                {editingId ? 'Photo (optional — leave blank to keep the current one)' : 'Photo'}
+              </label>
+              <label className="flex h-24 w-32 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#E5E7EB] text-center hover:border-[#FF5A36]">
+                <Upload size={16} className="text-[#FF5A36]" />
+                <span className="text-xs font-semibold text-[#FF5A36]">Add photo</span>
+                <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} className="hidden" />
+              </label>
+              {file && <p className="mt-1 text-xs text-[#6B7280]">Selected: {file.name}</p>}
+            </div>
+          )}
+
+          {hasVideo && (
+            <div>
+              <label className="mb-1 block text-xs text-[#6B7280]">
+                {editingId ? 'Video (optional — leave blank to keep the current one)' : 'Video (optional)'}
+              </label>
+              <label className="flex h-24 w-32 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#E5E7EB] text-center hover:border-[#FF5A36]">
+                <Video size={16} className="text-[#FF5A36]" />
+                <span className="text-xs font-semibold text-[#FF5A36]">Add video</span>
+                <input type="file" accept="video/*" onChange={(e) => setVideoFile(e.target.files?.[0] || null)} className="hidden" />
+              </label>
+              {videoFile && <p className="mt-1 text-xs text-[#6B7280]">Selected: {videoFile.name}</p>}
+            </div>
+          )}
+
+          {geocodeFrom && (
+            <p className="text-xs text-[#6B7280]">📍 We'll automatically look up the map location from the {geocodeFrom} field above when you save.</p>
+          )}
+
+          <div className="flex gap-2">
+            <button type="submit" disabled={saving} className="rounded-full bg-[#14161A] px-4 py-2 text-sm font-semibold text-white">{saving ? 'Saving...' : 'Save'}</button>
+            <button type="button" onClick={() => setShowForm(false)} className="rounded-full border border-[#E5E7EB] px-4 py-2 text-sm font-medium">Cancel</button>
+          </div>
+        </form>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-[#6B7280]">Loading...</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-[#6B7280]">Nothing here yet.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {rows.map((row) => (
+            <div key={row.id} className={`flex items-center justify-between rounded-xl border p-3 ${row.status === 'pending' ? 'border-[#FF5A36] bg-[#FFF7F5]' : 'border-[#E5E7EB]'}`}>
+              <div>
+                <p className="text-sm font-semibold">{row[titleField]}</p>
+                <p className="text-xs text-[#6B7280]">{row[subField]} · status: {row.status}</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => startEdit(row)} className="rounded-full border border-[#E5E7EB] px-4 py-1 text-xs font-semibold">Edit</button>
+                {row.status === 'pending' ? (
+                  <>
+                    <button onClick={() => setStatus(row, 'live')} className="rounded-full bg-green-100 px-4 py-1 text-xs font-semibold text-green-700">Approve</button>
+                    <button onClick={() => setStatus(row, 'removed')} className="rounded-full bg-red-100 px-4 py-1 text-xs font-semibold text-red-600">Reject</button>
+                  </>
+                ) : (
+                  <button onClick={() => setStatus(row, row.status === 'live' ? 'removed' : 'live')} className={`rounded-full px-4 py-1 text-xs font-semibold ${row.status === 'live' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'}`}>
+                    {row.status === 'live' ? 'Remove' : 'Restore'}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+function BannerAdminSection() {
+  const [rows, setRows] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [title, setTitle] = useState('')
+  const [subtitle, setSubtitle] = useState('')
+  const [linkUrl, setLinkUrl] = useState('')
+  const [bgColor, setBgColor] = useState('#14161A')
+  const [sortOrder, setSortOrder] = useState('1')
+  const [file, setFile] = useState<File | null>(null)
+  const [existingImageUrl, setExistingImageUrl] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+
+  const SWATCHES = ['#14161A', '#FF5A36', '#4F46E5', '#0F9D6B', '#B45309', '#DB2777']
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    setLoading(true)
+    const { data, error } = await supabase.from('banners').select('*').order('sort_order')
+    if (error) setMessage(error.message)
+    setRows(data || [])
+    setLoading(false)
+  }
+
+  function resetForm() {
+    setTitle(''); setSubtitle(''); setLinkUrl(''); setBgColor('#14161A'); setSortOrder('1')
+    setFile(null); setExistingImageUrl(''); setEditingId(null); setMessage('')
+  }
+
+  function startAdd() {
+    resetForm()
+    setShowForm(true)
+  }
+
+  function startEdit(row: any) {
+    setTitle(row.title || ''); setSubtitle(row.subtitle || ''); setLinkUrl(row.link_url || '')
+    setBgColor(row.bg_color || '#14161A'); setSortOrder(String(row.sort_order ?? 1))
+    setFile(null); setExistingImageUrl(row.image_url || ''); setEditingId(row.id); setMessage('')
+    setShowForm(true)
+  }
+
+  const previewImage = file ? URL.createObjectURL(file) : existingImageUrl
+
+  async function handleSubmit(e: any) {
+    e.preventDefault()
+    setSaving(true)
+    setMessage('')
+
+    let imageUrl = existingImageUrl
+    if (file) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, '_')
+      const fileName = `banners-${Date.now()}-${safeName}`
+      const { error: uploadError } = await supabase.storage.from('listing-images').upload(fileName, file)
+      if (uploadError) { setMessage('Image upload failed: ' + uploadError.message); setSaving(false); return }
+      const { data: urlData } = supabase.storage.from('listing-images').getPublicUrl(fileName)
+      imageUrl = urlData.publicUrl
+    }
+
+    const payload = {
+      title, subtitle, link_url: linkUrl, bg_color: bgColor,
+      sort_order: Number(sortOrder), image_url: imageUrl,
+    }
+
+    if (editingId) {
+      const { error } = await supabase.from('banners').update(payload).eq('id', editingId)
+      if (error) { setMessage(error.message); setSaving(false); return }
+    } else {
+      const { error } = await supabase.from('banners').insert({ ...payload, status: 'live' })
+      if (error) { setMessage(error.message); setSaving(false); return }
+    }
+
+    setSaving(false); setShowForm(false); load()
+  }
+
+  async function toggleStatus(row: any) {
+    const newStatus = row.status === 'live' ? 'removed' : 'live'
+    await supabase.from('banners').update({ status: newStatus }).eq('id', row.id)
+    load()
+  }
+
+  return (
+    <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-sm font-semibold text-[#6B7280]">{rows.length} total</p>
+        {!showForm && (
+          <button onClick={startAdd} className="rounded-full bg-[#FF5A36] px-4 py-2 text-sm font-semibold text-white">+ Add new</button>
+        )}
+      </div>
+
+      {message && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{message}</p>}
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="mb-6 grid gap-6 rounded-xl border border-[#E5E7EB] p-4 lg:grid-cols-[1fr_1.1fr]">
+          <div className="flex flex-col gap-3">
+            <p className="text-sm font-semibold">{editingId ? 'Edit banner' : 'Add new banner'}</p>
+
+            <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm" required />
+            <input placeholder="Subtitle" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm" required />
+            <input placeholder="Link (e.g. /bikes)" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm" required />
+            <input placeholder="Order (1, 2, 3...)" type="number" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm" required />
+
+            <div>
+              <p className="mb-2 text-sm font-medium">Background color</p>
+              <div className="flex flex-wrap items-center gap-2">
+                {SWATCHES.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setBgColor(c)}
+                    className={`h-8 w-8 rounded-full border-2 ${bgColor === c ? 'border-[#FF5A36]' : 'border-transparent'}`}
+                    style={{ backgroundColor: c }}
+                    aria-label={c}
+                  />
+                ))}
+                <input
+                  type="color"
+                  value={bgColor}
+                  onChange={(e) => setBgColor(e.target.value)}
+                  className="h-8 w-10 cursor-pointer rounded border border-[#E5E7EB] bg-transparent p-0"
+                />
+                <span className="text-xs text-[#6B7280]">{bgColor}</span>
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-sm font-medium">Photo</p>
+              <p className="mb-2 text-xs text-[#6B7280]">
+                Recommended size: 1600 × 600px (landscape). Upload a photo close to this shape and the full image will show without odd cropping.
+              </p>
+              <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" />
+              {editingId && !file && existingImageUrl && (
+                <p className="mt-1 text-xs text-[#6B7280]">Keeping current photo — choose a new file above to replace it.</p>
+              )}
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button type="submit" disabled={saving} className="rounded-full bg-[#14161A] px-4 py-2 text-sm font-semibold text-white">{saving ? 'Saving...' : 'Save'}</button>
+              <button type="button" onClick={() => setShowForm(false)} className="rounded-full border border-[#E5E7EB] px-4 py-2 text-sm font-medium">Cancel</button>
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-medium">Live preview</p>
+            <div className="relative aspect-[8/3] w-full overflow-hidden rounded-2xl" style={{ backgroundColor: bgColor }}>
+              {previewImage && (
+                <img src={previewImage} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" />
+              )}
+              <div className="relative flex h-full flex-col justify-center gap-2 px-6 py-6 text-white">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/80">Spotlight</span>
+                <h3 className="max-w-xs text-xl font-extrabold leading-tight sm:text-2xl">{title || 'Your banner title'}</h3>
+                <p className="max-w-xs text-sm text-white/85">{subtitle || 'Your subtitle text goes here'}</p>
+                <span className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-white px-4 py-2 text-xs font-semibold text-[#14161A]">
+                  Explore
+                </span>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-[#6B7280]">This is exactly how it'll look on the homepage.</p>
+          </div>
+        </form>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-[#6B7280]">Loading...</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-[#6B7280]">Nothing here yet.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {rows.map((row) => (
+            <div key={row.id} className="flex items-center justify-between rounded-xl border border-[#E5E7EB] p-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-16 shrink-0 overflow-hidden rounded-lg" style={{ backgroundColor: row.bg_color }}>
+                  {row.image_url && <img src={row.image_url} alt="" className="h-full w-full object-cover opacity-70" />}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">{row.title}</p>
+                  <p className="text-xs text-[#6B7280]">{row.link_url} · status: {row.status}</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => startEdit(row)} className="rounded-full border border-[#E5E7EB] px-4 py-1 text-xs font-semibold">Edit</button>
+                <button onClick={() => toggleStatus(row)} className={`rounded-full px-4 py-1 text-xs font-semibold ${row.status === 'live' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'}`}>
+                  {row.status === 'live' ? 'Remove' : 'Restore'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+}
