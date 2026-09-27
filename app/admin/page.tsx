@@ -81,6 +81,11 @@ export default function AdminPage() {
 
   useEffect(() => {
     async function check() {
+      const unlocked = localStorage.getItem('zwoop_admin_unlocked')
+      if (unlocked !== 'true') {
+        router.push('/admin/login')
+        return
+      }
       const { data: userData } = await supabase.auth.getUser()
       if (!userData.user || userData.user.id !== ADMIN_ID) {
         router.push('/')
