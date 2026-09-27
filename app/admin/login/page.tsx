@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-const ADMIN_ACCESS_CODE = 'CHANGE_THIS_TO_YOUR_OWN_SECRET_CODE'
+const ADMIN_ACCESS_CODE = 'arit090806'
 
 export default function AdminLogin() {
   const [code, setCode] = useState('')
