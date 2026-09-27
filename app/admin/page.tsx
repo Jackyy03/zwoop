@@ -396,11 +396,15 @@ function AdminSection({
   }
 
   function addGalleryFiles(e: any) {
-    const picked = Array.from(e.target.files || []) as File[]
-    const withPreviews = picked.map((f) => ({ file: f, preview: URL.createObjectURL(f) }))
-    setGalleryItems([...galleryItems, ...withPreviews].slice(0, 4))
-    e.target.value = ''
-  }
+  const picked = Array.from(e.target.files || []) as File[]
+  const withPreviews = picked.map((f) => ({
+    file: f,
+    preview: URL.createObjectURL(f)
+  }))
+
+  setGalleryItems([...galleryItems, ...withPreviews].slice(0, 7))
+  e.target.value = ''
+}
 
   function removeGalleryItem(i: number) {
     setGalleryItems(galleryItems.filter((_, idx) => idx !== i))
@@ -522,30 +526,51 @@ function AdminSection({
           ))}
 
           {imageMode === 'gallery' && (
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-semibold">Photos</p>
-                <p className="text-xs text-[#6B7280]">Up to 4 photos</p>
-              </div>
-              <div className="grid grid-cols-4 gap-3">
-                {galleryItems.map((item, i) => (
-                  <div key={i} className="relative">
-                    <img src={item.preview || item.url} alt={`Photo ${i + 1}`} className="h-20 w-full rounded-xl object-cover" />
-                    <button type="button" onClick={() => removeGalleryItem(i)} className="absolute -right-2 -top-2 rounded-full bg-[#14161A] p-1 text-white">
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-                {galleryItems.length < 4 && (
-                  <label className="flex h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#E5E7EB] text-center hover:border-[#FF5A36]">
-                    <Upload size={16} className="text-[#FF5A36]" />
-                    <span className="text-xs font-semibold text-[#FF5A36]">Add photo</span>
-                    <input type="file" accept="image/*" multiple onChange={addGalleryFiles} className="hidden" />
-                  </label>
-                )}
-              </div>
-            </div>
-          )}
+  <div>
+    <div className="mb-2 flex items-center justify-between">
+      <p className="text-sm font-semibold">Photos</p>
+      <p className="text-xs text-[#6B7280]">Up to 7 photos</p>
+    </div>
+
+    <div className="grid grid-cols-4 gap-3">
+      {galleryItems.map((item, i) => (
+        <div key={i} className="relative">
+          <img
+            src={item.preview || item.url}
+            alt={`Photo ${i + 1}`}
+            className="h-20 w-full rounded-xl object-cover"
+          />
+
+          <button
+            type="button"
+            onClick={() => removeGalleryItem(i)}
+            className="absolute -right-2 -top-2 rounded-full bg-[#14161A] p-1 text-white"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      ))}
+
+      {galleryItems.length < 7 && (
+        <label className="flex h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#E5E7EB] text-center hover:border-[#FF5A36]">
+          <Upload size={16} className="text-[#FF5A36]" />
+
+          <span className="text-xs font-semibold text-[#FF5A36]">
+            Add photo
+          </span>
+
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={addGalleryFiles}
+            className="hidden"
+          />
+        </label>
+      )}
+    </div>
+  </div>
+)}
 
           {imageMode !== 'gallery' && hasImage && (
             <div>
