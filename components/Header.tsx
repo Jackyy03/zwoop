@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { Search, MapPin, ChevronRight, UserRound, Heart, MessageCircle, Plus } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
+import { useChat } from '@/contexts/ChatContext'
 
 const NAV_LINKS = [
   { href: '/marketplace', label: 'Buy & Sell' },
@@ -21,6 +22,7 @@ export default function Header() {
   const [collegeName, setCollegeName] = useState('Your College')
   const [query, setQuery] = useState('')
   const router = useRouter()
+  const { unread } = useChat()
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setLoggedIn(!!data.session))
@@ -65,8 +67,13 @@ export default function Header() {
         </form>
 
         <div className="flex shrink-0 items-center gap-3 sm:gap-5">
-          <Link href="/messages" className="flex flex-col items-center gap-0.5 text-[#14161A] hover:text-[#FF5A36]">
+          <Link href="/messages" className="relative flex flex-col items-center gap-0.5 text-[#14161A] hover:text-[#FF5A36]">
             <MessageCircle size={20} />
+            {unread > 0 && (
+              <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#FF5A36] px-1 text-[10px] font-bold text-white">
+                {unread > 9 ? '9+' : unread}
+              </span>
+            )}
             <span className="hidden text-xs font-medium sm:inline">Messages</span>
           </Link>
           <Link href="/saved" className="flex flex-col items-center gap-0.5 text-[#14161A] hover:text-[#FF5A36]">
