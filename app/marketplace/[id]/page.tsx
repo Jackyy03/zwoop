@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { ShieldCheck, ChevronLeft } from 'lucide-react'
 import SaveButton from '@/components/SaveButton'
 import ProductGallery from '@/components/ProductGallery'
+import MessageSellerButton from '@/components/MessageSellerButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,15 +33,16 @@ export default async function ListingDetail({ params }: { params: Promise<{ id: 
   const { data: images } = await supabase.from('listing_images').select('*').eq('listing_id', id).order('sort_order')
   const gallery = images && images.length > 0 ? images.map((i) => i.url) : (listing.image_url ? [listing.image_url] : [])
 
-  const { data: seller } = await supabase.from('profiles').select('name, phone, avatar_url, course').eq('id', listing.seller_id).single()
-  const whatsappLink = seller?.phone ? `https://wa.me/91${seller.phone.replace(/\D/g, '')}` : null
+  const { data: seller } = await supabase.from('public_profiles').select('name, avatar_url, course').eq('id', listing.seller_id).maybeSingle()
+  const { data: contact } = await supabase.from('profiles').select('phone').eq('id', listing.seller_id).maybeSingle()
+  const whatsappLink = contact?.phone ? `https://wa.me/91${contact.phone.replace(/\D/g, '')}` : null
 
   const { data: related } = await supabase.from('listings').select('*').eq('status', 'live').eq('category', listing.category).neq('id', id).limit(4)
 
   return (
     <main className="min-h-screen bg-[#F7F7F9] text-[#14161A]">
       <Header />
-      <div className="mx-auto max-w-6xl px-6 py-8">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
         <p className="mb-4 text-sm text-[#6B7280]">
           <Link href="/marketplace" className="hover:text-[#FF5A36]">Buy & Sell</Link> / {listing.category}
         </p>
@@ -48,14 +50,14 @@ export default async function ListingDetail({ params }: { params: Promise<{ id: 
           <ChevronLeft size={16} /> Back to marketplace
         </Link>
 
-        <div className="grid gap-8 rounded-2xl border border-[#E5E7EB] bg-white p-6 sm:grid-cols-[1.7fr_1fr]">
+        <div className="grid gap-8 rounded-2xl border border-[#E5E7EB] bg-white p-4 sm:grid-cols-[1.7fr_1fr] sm:p-6">
           <ProductGallery images={gallery} video={listing.video_url} alt={listing.title} />
 
           <div>
             <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-green-700">
               <ShieldCheck size={14} /> Verified student seller
             </p>
-            <h1 className="text-3xl font-bold">{listing.title}</h1>
+            <h1 className="text-2xl font-bold sm:text-3xl">{listing.title}</h1>
             <p className="mt-3 text-2xl font-extrabold">₹{listing.price}</p>
             <p className="mt-1 text-sm text-[#6B7280]">{listing.condition} · {timeAgo(listing.created_at)}</p>
 
@@ -76,13 +78,12 @@ export default async function ListingDetail({ params }: { params: Promise<{ id: 
               </div>
             </div>
 
-            <div className="mt-5 flex flex-wrap gap-3">
-              {whatsappLink ? (
-                <a href={whatsappLink} target="_blank" className="flex items-center gap-2 rounded-full bg-[#14161A] px-6 py-3 text-sm font-semibold text-white">
-                  Contact seller
+            <div className="mt-5 flex flex-wrap items-start gap-3">
+              <MessageSellerButton sellerId={listing.seller_id} listingId={listing.id} />
+              {whatsappLink && (
+                <a href={whatsappLink} target="_blank" className="rounded-full border border-[#E5E7EB] px-5 py-3 text-sm font-semibold hover:border-[#FF5A36]">
+                  WhatsApp
                 </a>
-              ) : (
-                <p className="text-sm text-[#6B7280]">Seller hasn't added a contact number yet.</p>
               )}
               <SaveButton />
             </div>
