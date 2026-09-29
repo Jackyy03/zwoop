@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { generateZwoopId } from '@/lib/zwoopId'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { Loader2 } from 'lucide-react'
@@ -44,6 +45,8 @@ export default function CompleteProfile() {
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) { router.push('/login'); return }
 
+    const zwoopId = await generateZwoopId(name)
+
     const { error } = await supabase.from('profiles').upsert({
       id: userData.user.id,
       name: name.trim(),
@@ -51,6 +54,7 @@ export default function CompleteProfile() {
       year: Number(year),
       phone: cleanPhone,
       college_id: 1,
+      zwoop_id: zwoopId,
     })
 
     if (error) {
@@ -80,26 +84,20 @@ export default function CompleteProfile() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
             <label className="mb-1 block text-sm font-medium">Full name</label>
-            <input
-              value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" required
-              className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2.5 text-sm outline-none focus:border-[#FF5A36]"
-            />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" required
+              className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2.5 text-sm outline-none focus:border-[#FF5A36]" />
           </div>
 
           <div>
             <label className="mb-1 block text-sm font-medium">Course</label>
-            <input
-              value={course} onChange={(e) => setCourse(e.target.value)} placeholder="e.g. B.Tech CSE" required
-              className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2.5 text-sm outline-none focus:border-[#FF5A36]"
-            />
+            <input value={course} onChange={(e) => setCourse(e.target.value)} placeholder="e.g. B.Tech CSE" required
+              className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2.5 text-sm outline-none focus:border-[#FF5A36]" />
           </div>
 
           <div>
             <label className="mb-1 block text-sm font-medium">Year</label>
-            <select
-              value={year} onChange={(e) => setYear(e.target.value)} required
-              className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2.5 text-sm outline-none focus:border-[#FF5A36]"
-            >
+            <select value={year} onChange={(e) => setYear(e.target.value)} required
+              className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2.5 text-sm outline-none focus:border-[#FF5A36]">
               <option value="">Select your year</option>
               <option value="1">1st year</option>
               <option value="2">2nd year</option>
@@ -113,20 +111,16 @@ export default function CompleteProfile() {
             <label className="mb-1 block text-sm font-medium">Phone number</label>
             <div className="flex items-center overflow-hidden rounded-lg border border-[#E5E7EB] focus-within:border-[#FF5A36]">
               <span className="border-r border-[#E5E7EB] bg-[#F7F7F9] px-3 py-2.5 text-sm text-[#6B7280]">+91</span>
-              <input
-                value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10-digit number" inputMode="numeric" required
-                className="w-full px-3 py-2.5 text-sm outline-none"
-              />
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10-digit number" inputMode="numeric" required
+                className="w-full px-3 py-2.5 text-sm outline-none" />
             </div>
             <p className="mt-1 text-xs text-[#6B7280]">Used for WhatsApp contact on your listings.</p>
           </div>
 
           {message && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{message}</p>}
 
-          <button
-            type="submit" disabled={saving}
-            className="flex w-full items-center justify-center gap-2 rounded-full bg-[#FF5A36] py-3 text-sm font-semibold text-white disabled:opacity-70"
-          >
+          <button type="submit" disabled={saving}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-[#FF5A36] py-3 text-sm font-semibold text-white disabled:opacity-70">
             {saving ? (<><Loader2 size={16} className="animate-spin" /> Saving your profile...</>) : 'Save and continue'}
           </button>
         </form>

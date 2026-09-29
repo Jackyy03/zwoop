@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/Header'
-import { Upload, ShieldCheck, ChevronRight, X, Clock } from 'lucide-react'
+import { Upload, ShieldCheck, ChevronRight, X, FileText } from 'lucide-react'
 
 const CATEGORIES = ['Books', 'Electronics', 'Laptops', 'Phones', 'Furniture', 'Appliances', 'Cycle', 'Gaming', 'Other']
 const CONDITIONS = ['Like New', 'Good', 'Fair']
@@ -21,6 +21,7 @@ export default function CreateListing() {
   const [files, setFiles] = useState<File[]>([])
   const [previews, setPreviews] = useState<string[]>([])
   const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [docFile, setDocFile] = useState<File | null>(null)
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -73,10 +74,20 @@ export default function CreateListing() {
       videoUrl = urlData.publicUrl
     }
 
+    let documentUrl = ''
+    if (docFile) {
+      const safeName = docFile.name.replace(/[^a-zA-Z0-9.]/g, '_')
+      const fileName = `${userData.user.id}-doc-${Date.now()}-${safeName}`
+      const { error: uploadError } = await supabase.storage.from('listing-images').upload(fileName, docFile)
+      if (uploadError) { setMessage(uploadError.message); setLoading(false); return }
+      const { data: urlData } = supabase.storage.from('listing-images').getPublicUrl(fileName)
+      documentUrl = urlData.publicUrl
+    }
+
     const { data: newListing, error } = await supabase.from('listings').insert({
       seller_id: userData.user.id, college_id: 1, category, title, description,
       price: Number(price), condition, location_text: location,
-      image_url: uploadedUrls[0], video_url: videoUrl, status: 'pending',
+      image_url: uploadedUrls[0], video_url: videoUrl, document_url: documentUrl, status: 'pending',
     }).select().single()
 
     if (error) { setMessage(error.message); setLoading(false); return }
@@ -94,19 +105,15 @@ export default function CreateListing() {
         <Header />
         <div className="mx-auto max-w-md px-6 py-24 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#FFF1EC] text-[#FF5A36]">
-            <Clock size={26} />
+            <ShieldCheck size={26} />
           </div>
           <h1 className="text-2xl font-bold">Submitted for review</h1>
           <p className="mt-2 text-sm text-[#6B7280]">
-            Your listing has been sent for a quick check and will go live on Buy & Sell once it's approved — usually within a day.
+            Your listing has been sent for a quick check and will go live on Buy & Sell once it's approved.
           </p>
           <div className="mt-6 flex justify-center gap-3">
-            <Link href="/profile" className="rounded-full bg-[#14161A] px-5 py-2.5 text-sm font-semibold text-white">
-              View in My Listings
-            </Link>
-            <Link href="/marketplace" className="rounded-full border border-[#E5E7EB] px-5 py-2.5 text-sm font-semibold">
-              Back to Buy & Sell
-            </Link>
+            <Link href="/profile" className="rounded-full bg-[#14161A] px-5 py-2.5 text-sm font-semibold text-white">View in My Listings</Link>
+            <Link href="/marketplace" className="rounded-full border border-[#E5E7EB] px-5 py-2.5 text-sm font-semibold">Back to Buy & Sell</Link>
           </div>
         </div>
       </main>
@@ -116,7 +123,7 @@ export default function CreateListing() {
   return (
     <main className="min-h-screen bg-[#F7F7F9] text-[#14161A]">
       <Header />
-      <div className="mx-auto max-w-4xl px-6 py-10">
+      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
         <p className="mb-6 text-sm text-[#6B7280]">
           <Link href="/" className="hover:text-[#FF5A36]">Home</Link> / Sell an item
         </p>
@@ -148,6 +155,22 @@ export default function CreateListing() {
                   <Upload size={18} className="text-[#FF5A36]" />
                   <span className="text-xs font-semibold text-[#FF5A36]">Add photo</span>
                   <input type="file" accept="image/*" multiple onChange={handleFiles} className="hidden" />
+                </label>
+              )}
+            </div>
+
+            <div className="mb-4">
+              <p className="mb-1 font-semibold">Document (optional)</p>
+              <p className="mb-2 text-xs text-[#6B7280]">Selling notes, a book, or any PDF/document? Attach it here.</p>
+              {docFile ? (
+                <div className="flex items-center justify-between rounded-xl border border-[#E5E7EB] p-3">
+                  <span className="flex items-center gap-2 text-sm"><FileText size={16} className="text-[#FF5A36]" /> {docFile.name}</span>
+                  <button type="button" onClick={() => setDocFile(null)} className="text-[#6B7280] hover:text-red-600"><X size={16} /></button>
+                </div>
+              ) : (
+                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#E5E7EB] py-4 text-sm font-semibold text-[#FF5A36] hover:border-[#FF5A36]">
+                  <Upload size={16} /> Add PDF or document
+                  <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setDocFile(e.target.files?.[0] || null)} className="hidden" />
                 </label>
               )}
             </div>
@@ -199,13 +222,8 @@ export default function CreateListing() {
             <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Main gate" className="mb-4 w-full rounded-lg border border-[#E5E7EB] px-3 py-2.5 text-sm" required />
 
             <div className="mb-4 flex items-start gap-2 rounded-xl bg-orange-50 p-3 text-sm text-orange-700">
-              <Clock size={16} className="mt-0.5 shrink-0" />
-              <span>Listings are quickly reviewed before going live, to keep Zwoop safe for everyone.</span>
-            </div>
-
-            <div className="mb-4 flex items-start gap-2 rounded-xl bg-green-50 p-3 text-sm text-green-700">
               <ShieldCheck size={16} className="mt-0.5 shrink-0" />
-              <span>Only verified students from your college can contact you. Stay safe and meet in public places.</span>
+              <span>Listings are quickly reviewed before going live, to keep Zwoop safe for everyone.</span>
             </div>
 
             {message && <p className="mb-4 text-sm text-red-600">{message}</p>}
