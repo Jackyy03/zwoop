@@ -135,8 +135,7 @@ export default function AdminPage() {
           {activeTab === 'overview' && <OverviewPanel onGoToListings={() => setActiveTab('listings')} />}
           {activeTab === 'users' && <UsersPanel />}
           {activeTab === 'reports' && <ReportsPanel />}
-          {activeTab === 'banners' && <AdminPage />}
-          {crudTab && crudTab.key !== 'banners' && (() => {
+          {crudTab && (() => {
             const { key, icon, ...sectionProps } = crudTab
             return <AdminSection key={key} {...sectionProps} />
           })()}
@@ -259,7 +258,7 @@ function UsersPanel() {
             <div key={u.id} className="flex items-center justify-between py-3">
               <div>
                 <p className="text-sm font-semibold">{u.name}</p>
-                <p className="text-xs text-[#6B7280]">{u.course} · Year {u.year} · {u.phone || 'no phone'}</p>
+                <p className="text-xs text-[#6B7280]">{u.course} · Year {u.year} · {u.phone || 'no phone'} · ID: {u.zwoop_id || 'not set'}</p>
               </div>
               <p className="text-xs text-[#6B7280]">Joined {new Date(u.created_at).toLocaleDateString('en-IN')}</p>
             </div>
@@ -355,6 +354,9 @@ function AdminSection({
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([])
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'live' | 'pending' | 'removed'>('all')
+  const [viewingRow, setViewingRow] = useState<any | null>(null)
+  const [viewingGallery, setViewingGallery] = useState<string[]>([])
 
   useEffect(() => { load() }, [table])
 
@@ -391,20 +393,26 @@ function AdminSection({
     setShowForm(true)
   }
 
+  async function openView(row: any) {
+    setViewingRow(row)
+    if (imageMode === 'gallery' && imagesTable && imagesFk) {
+      const { data: imgs } = await supabase.from(imagesTable).select('url').eq(imagesFk, row.id).order('sort_order')
+      setViewingGallery((imgs || []).map((i: any) => i.url))
+    } else {
+      setViewingGallery(row.image_url ? [row.image_url] : [])
+    }
+  }
+
   function updateField(key: string, value: any) {
     setFormData((prev: any) => ({ ...prev, [key]: value }))
   }
 
   function addGalleryFiles(e: any) {
-  const picked = Array.from(e.target.files || []) as File[]
-  const withPreviews = picked.map((f) => ({
-    file: f,
-    preview: URL.createObjectURL(f)
-  }))
-
-  setGalleryItems([...galleryItems, ...withPreviews].slice(0, 7))
-  e.target.value = ''
-}
+    const picked = Array.from(e.target.files || []) as File[]
+    const withPreviews = picked.map((f) => ({ file: f, preview: URL.createObjectURL(f) }))
+    setGalleryItems([...galleryItems, ...withPreviews].slice(0, 4))
+    e.target.value = ''
+  }
 
   function removeGalleryItem(i: number) {
     setGalleryItems(galleryItems.filter((_, idx) => idx !== i))
@@ -422,13 +430,8 @@ function AdminSection({
       try {
         const res = await fetch(`/api/geocode?q=${encodeURIComponent(formData[geocodeFrom] + ' India')}`)
         const geo = await res.json()
-        if (geo.lat && geo.lng) {
-          payload.lat = geo.lat
-          payload.lng = geo.lng
-        }
-      } catch {
-        // if the lookup fails, the event still saves fine — just without distance sorting
-      }
+        if (geo.lat && geo.lng) { payload.lat = geo.lat; payload.lng = geo.lng }
+      } catch {}
     }
 
     let galleryUrls: string[] = []
@@ -493,12 +496,31 @@ function AdminSection({
     const { error } = await supabase.from(table).update({ status: newStatus }).eq('id', row.id)
     if (error) setMessage(error.message)
     load()
+    if (viewingRow?.id === row.id) setViewingRow(null)
   }
+
+  const counts = {
+    all: rows.length,
+    live: rows.filter((r) => r.status === 'live').length,
+    pending: rows.filter((r) => r.status === 'pending').length,
+    removed: rows.filter((r) => r.status === 'removed').length,
+  }
+  const filteredRows = statusFilter === 'all' ? rows : rows.filter((r) => r.status === statusFilter)
 
   return (
     <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm font-semibold text-[#6B7280]">{rows.length} total</p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          {(['all', 'live', 'pending', 'removed'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f)}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${statusFilter === f ? 'bg-[#14161A] text-white' : 'border border-[#E5E7EB] text-[#6B7280]'}`}
+            >
+              {f === 'all' ? 'All' : f === 'live' ? 'Live' : f === 'pending' ? 'Pending' : 'Removed'} ({counts[f]})
+            </button>
+          ))}
+        </div>
         {!showForm && (
           <button onClick={startAdd} className="rounded-full bg-[#FF5A36] px-4 py-2 text-sm font-semibold text-white">+ Add new</button>
         )}
@@ -526,51 +548,30 @@ function AdminSection({
           ))}
 
           {imageMode === 'gallery' && (
-  <div>
-    <div className="mb-2 flex items-center justify-between">
-      <p className="text-sm font-semibold">Photos</p>
-      <p className="text-xs text-[#6B7280]">Up to 7 photos</p>
-    </div>
-
-    <div className="grid grid-cols-4 gap-3">
-      {galleryItems.map((item, i) => (
-        <div key={i} className="relative">
-          <img
-            src={item.preview || item.url}
-            alt={`Photo ${i + 1}`}
-            className="h-20 w-full rounded-xl object-cover"
-          />
-
-          <button
-            type="button"
-            onClick={() => removeGalleryItem(i)}
-            className="absolute -right-2 -top-2 rounded-full bg-[#14161A] p-1 text-white"
-          >
-            <X size={12} />
-          </button>
-        </div>
-      ))}
-
-      {galleryItems.length < 7 && (
-        <label className="flex h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#E5E7EB] text-center hover:border-[#FF5A36]">
-          <Upload size={16} className="text-[#FF5A36]" />
-
-          <span className="text-xs font-semibold text-[#FF5A36]">
-            Add photo
-          </span>
-
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={addGalleryFiles}
-            className="hidden"
-          />
-        </label>
-      )}
-    </div>
-  </div>
-)}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-semibold">Photos</p>
+                <p className="text-xs text-[#6B7280]">Up to 4 photos</p>
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                {galleryItems.map((item, i) => (
+                  <div key={i} className="relative">
+                    <img src={item.preview || item.url} alt={`Photo ${i + 1}`} className="h-20 w-full rounded-xl object-cover" />
+                    <button type="button" onClick={() => removeGalleryItem(i)} className="absolute -right-2 -top-2 rounded-full bg-[#14161A] p-1 text-white">
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {galleryItems.length < 4 && (
+                  <label className="flex h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#E5E7EB] text-center hover:border-[#FF5A36]">
+                    <Upload size={16} className="text-[#FF5A36]" />
+                    <span className="text-xs font-semibold text-[#FF5A36]">Add photo</span>
+                    <input type="file" accept="image/*" multiple onChange={addGalleryFiles} className="hidden" />
+                  </label>
+                )}
+              </div>
+            </div>
+          )}
 
           {imageMode !== 'gallery' && hasImage && (
             <div>
@@ -613,17 +614,18 @@ function AdminSection({
 
       {loading ? (
         <p className="text-sm text-[#6B7280]">Loading...</p>
-      ) : rows.length === 0 ? (
-        <p className="text-sm text-[#6B7280]">Nothing here yet.</p>
+      ) : filteredRows.length === 0 ? (
+        <p className="text-sm text-[#6B7280]">Nothing here.</p>
       ) : (
         <div className="flex flex-col gap-2">
-          {rows.map((row) => (
-            <div key={row.id} className={`flex items-center justify-between rounded-xl border p-3 ${row.status === 'pending' ? 'border-[#FF5A36] bg-[#FFF7F5]' : 'border-[#E5E7EB]'}`}>
+          {filteredRows.map((row) => (
+            <div key={row.id} className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3 ${row.status === 'pending' ? 'border-[#FF5A36] bg-[#FFF7F5]' : 'border-[#E5E7EB]'}`}>
               <div>
                 <p className="text-sm font-semibold">{row[titleField]}</p>
                 <p className="text-xs text-[#6B7280]">{row[subField]} · status: {row.status}</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => openView(row)} className="rounded-full border border-[#E5E7EB] px-4 py-1 text-xs font-semibold">View</button>
                 <button onClick={() => startEdit(row)} className="rounded-full border border-[#E5E7EB] px-4 py-1 text-xs font-semibold">Edit</button>
                 {row.status === 'pending' ? (
                   <>
@@ -640,202 +642,66 @@ function AdminSection({
           ))}
         </div>
       )}
-    </div>
-  )
-function BannerAdminSection() {
-  const [rows, setRows] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [title, setTitle] = useState('')
-  const [subtitle, setSubtitle] = useState('')
-  const [linkUrl, setLinkUrl] = useState('')
-  const [bgColor, setBgColor] = useState('#14161A')
-  const [sortOrder, setSortOrder] = useState('1')
-  const [file, setFile] = useState<File | null>(null)
-  const [existingImageUrl, setExistingImageUrl] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState('')
 
-  const SWATCHES = ['#14161A', '#FF5A36', '#4F46E5', '#0F9D6B', '#B45309', '#DB2777']
+      {viewingRow && (
+        <div onClick={() => setViewingRow(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div onClick={(e) => e.stopPropagation()} className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6">
+            <div className="mb-4 flex items-start justify-between">
+              <h3 className="text-lg font-bold">{viewingRow[titleField]}</h3>
+              <button onClick={() => setViewingRow(null)} className="text-[#6B7280] hover:text-[#14161A]"><X size={20} /></button>
+            </div>
 
-  useEffect(() => { load() }, [])
-
-  async function load() {
-    setLoading(true)
-    const { data, error } = await supabase.from('banners').select('*').order('sort_order')
-    if (error) setMessage(error.message)
-    setRows(data || [])
-    setLoading(false)
-  }
-
-  function resetForm() {
-    setTitle(''); setSubtitle(''); setLinkUrl(''); setBgColor('#14161A'); setSortOrder('1')
-    setFile(null); setExistingImageUrl(''); setEditingId(null); setMessage('')
-  }
-
-  function startAdd() {
-    resetForm()
-    setShowForm(true)
-  }
-
-  function startEdit(row: any) {
-    setTitle(row.title || ''); setSubtitle(row.subtitle || ''); setLinkUrl(row.link_url || '')
-    setBgColor(row.bg_color || '#14161A'); setSortOrder(String(row.sort_order ?? 1))
-    setFile(null); setExistingImageUrl(row.image_url || ''); setEditingId(row.id); setMessage('')
-    setShowForm(true)
-  }
-
-  const previewImage = file ? URL.createObjectURL(file) : existingImageUrl
-
-  async function handleSubmit(e: any) {
-    e.preventDefault()
-    setSaving(true)
-    setMessage('')
-
-    let imageUrl = existingImageUrl
-    if (file) {
-      const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, '_')
-      const fileName = `banners-${Date.now()}-${safeName}`
-      const { error: uploadError } = await supabase.storage.from('listing-images').upload(fileName, file)
-      if (uploadError) { setMessage('Image upload failed: ' + uploadError.message); setSaving(false); return }
-      const { data: urlData } = supabase.storage.from('listing-images').getPublicUrl(fileName)
-      imageUrl = urlData.publicUrl
-    }
-
-    const payload = {
-      title, subtitle, link_url: linkUrl, bg_color: bgColor,
-      sort_order: Number(sortOrder), image_url: imageUrl,
-    }
-
-    if (editingId) {
-      const { error } = await supabase.from('banners').update(payload).eq('id', editingId)
-      if (error) { setMessage(error.message); setSaving(false); return }
-    } else {
-      const { error } = await supabase.from('banners').insert({ ...payload, status: 'live' })
-      if (error) { setMessage(error.message); setSaving(false); return }
-    }
-
-    setSaving(false); setShowForm(false); load()
-  }
-
-  async function toggleStatus(row: any) {
-    const newStatus = row.status === 'live' ? 'removed' : 'live'
-    await supabase.from('banners').update({ status: newStatus }).eq('id', row.id)
-    load()
-  }
-
-  return (
-    <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm font-semibold text-[#6B7280]">{rows.length} total</p>
-        {!showForm && (
-          <button onClick={startAdd} className="rounded-full bg-[#FF5A36] px-4 py-2 text-sm font-semibold text-white">+ Add new</button>
-        )}
-      </div>
-
-      {message && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{message}</p>}
-
-      {showForm && (
-        <form onSubmit={handleSubmit} className="mb-6 grid gap-6 rounded-xl border border-[#E5E7EB] p-4 lg:grid-cols-[1fr_1.1fr]">
-          <div className="flex flex-col gap-3">
-            <p className="text-sm font-semibold">{editingId ? 'Edit banner' : 'Add new banner'}</p>
-
-            <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm" required />
-            <input placeholder="Subtitle" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm" required />
-            <input placeholder="Link (e.g. /bikes)" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm" required />
-            <input placeholder="Order (1, 2, 3...)" type="number" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm" required />
-
-            <div>
-              <p className="mb-2 text-sm font-medium">Background color</p>
-              <div className="flex flex-wrap items-center gap-2">
-                {SWATCHES.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setBgColor(c)}
-                    className={`h-8 w-8 rounded-full border-2 ${bgColor === c ? 'border-[#FF5A36]' : 'border-transparent'}`}
-                    style={{ backgroundColor: c }}
-                    aria-label={c}
-                  />
+            {viewingGallery.length > 0 && (
+              <div className="mb-4 grid grid-cols-2 gap-2">
+                {viewingGallery.map((url, i) => (
+                  <img key={i} src={url} alt={`Photo ${i + 1}`} className="h-32 w-full rounded-lg object-cover" />
                 ))}
-                <input
-                  type="color"
-                  value={bgColor}
-                  onChange={(e) => setBgColor(e.target.value)}
-                  className="h-8 w-10 cursor-pointer rounded border border-[#E5E7EB] bg-transparent p-0"
-                />
-                <span className="text-xs text-[#6B7280]">{bgColor}</span>
               </div>
-            </div>
+            )}
 
-            <div>
-              <p className="mb-1 text-sm font-medium">Photo</p>
-              <p className="mb-2 text-xs text-[#6B7280]">
-                Recommended size: 1600 × 600px (landscape). Upload a photo close to this shape and the full image will show without odd cropping.
-              </p>
-              <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" />
-              {editingId && !file && existingImageUrl && (
-                <p className="mt-1 text-xs text-[#6B7280]">Keeping current photo — choose a new file above to replace it.</p>
-              )}
-            </div>
+            {viewingRow.video_url && (
+              <video src={viewingRow.video_url} controls className="mb-4 w-full rounded-lg bg-black" style={{ maxHeight: '240px' }} />
+            )}
 
-            <div className="flex gap-2 pt-2">
-              <button type="submit" disabled={saving} className="rounded-full bg-[#14161A] px-4 py-2 text-sm font-semibold text-white">{saving ? 'Saving...' : 'Save'}</button>
-              <button type="button" onClick={() => setShowForm(false)} className="rounded-full border border-[#E5E7EB] px-4 py-2 text-sm font-medium">Cancel</button>
-            </div>
-          </div>
+            {viewingRow.document_url && (
+              <a href={viewingRow.document_url} target="_blank" className="mb-4 flex items-center gap-2 rounded-lg border border-[#E5E7EB] p-3 text-sm font-medium hover:border-[#FF5A36]">
+                📄 View attached document
+              </a>
+            )}
 
-          <div>
-            <p className="mb-2 text-sm font-medium">Live preview</p>
-            <div className="relative aspect-[8/3] w-full overflow-hidden rounded-2xl" style={{ backgroundColor: bgColor }}>
-              {previewImage && (
-                <img src={previewImage} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" />
-              )}
-              <div className="relative flex h-full flex-col justify-center gap-2 px-6 py-6 text-white">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-white/80">Spotlight</span>
-                <h3 className="max-w-xs text-xl font-extrabold leading-tight sm:text-2xl">{title || 'Your banner title'}</h3>
-                <p className="max-w-xs text-sm text-white/85">{subtitle || 'Your subtitle text goes here'}</p>
-                <span className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-white px-4 py-2 text-xs font-semibold text-[#14161A]">
-                  Explore
-                </span>
-              </div>
-            </div>
-            <p className="mt-2 text-xs text-[#6B7280]">This is exactly how it'll look on the homepage.</p>
-          </div>
-        </form>
-      )}
-
-      {loading ? (
-        <p className="text-sm text-[#6B7280]">Loading...</p>
-      ) : rows.length === 0 ? (
-        <p className="text-sm text-[#6B7280]">Nothing here yet.</p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {rows.map((row) => (
-            <div key={row.id} className="flex items-center justify-between rounded-xl border border-[#E5E7EB] p-3">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-16 shrink-0 overflow-hidden rounded-lg" style={{ backgroundColor: row.bg_color }}>
-                  {row.image_url && <img src={row.image_url} alt="" className="h-full w-full object-cover opacity-70" />}
+            <div className="flex flex-col gap-2 text-sm">
+              {fields.map((f) => (
+                <div key={f.key} className="flex justify-between gap-4 border-b border-[#F0F0F2] pb-2">
+                  <span className="text-[#6B7280]">{f.label}</span>
+                  <span className="text-right font-medium">
+                    {f.type === 'checkbox' ? (viewingRow[f.key] ? 'Yes' : 'No') : String(viewingRow[f.key] ?? '—')}
+                  </span>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold">{row.title}</p>
-                  <p className="text-xs text-[#6B7280]">{row.link_url} · status: {row.status}</p>
-                </div>
+              ))}
+              <div className="flex justify-between gap-4 pb-2">
+                <span className="text-[#6B7280]">Status</span>
+                <span className="text-right font-medium">{viewingRow.status}</span>
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => startEdit(row)} className="rounded-full border border-[#E5E7EB] px-4 py-1 text-xs font-semibold">Edit</button>
-                <button onClick={() => toggleStatus(row)} className={`rounded-full px-4 py-1 text-xs font-semibold ${row.status === 'live' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'}`}>
-                  {row.status === 'live' ? 'Remove' : 'Restore'}
+            </div>
+
+            <div className="mt-5 flex gap-2">
+              {viewingRow.status === 'pending' ? (
+                <>
+                  <button onClick={() => setStatus(viewingRow, 'live')} className="flex-1 rounded-full bg-green-600 py-2 text-sm font-semibold text-white">Approve</button>
+                  <button onClick={() => setStatus(viewingRow, 'removed')} className="flex-1 rounded-full bg-red-100 py-2 text-sm font-semibold text-red-600">Reject</button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setStatus(viewingRow, viewingRow.status === 'live' ? 'removed' : 'live')}
+                  className={`flex-1 rounded-full py-2 text-sm font-semibold ${viewingRow.status === 'live' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'}`}
+                >
+                  {viewingRow.status === 'live' ? 'Remove' : 'Restore'}
                 </button>
-              </div>
+              )}
             </div>
-          ))}
+          </div>
         </div>
       )}
     </div>
   )
-}
-
-
 }

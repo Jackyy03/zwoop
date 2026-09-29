@@ -17,6 +17,7 @@ export default function FindStudents() {
   const [results, setResults] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
+  const [error, setError] = useState('')
   const [me, setMe] = useState<string | null>(null)
 
   useEffect(() => {
@@ -29,13 +30,15 @@ export default function FindStudents() {
     if (!q) return
     setLoading(true)
     setSearched(true)
+    setError('')
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('public_profiles')
       .select('*')
-      .or(`name.ilike.%${q}%,zwoop_id.eq.${q}`)
+      .or(`name.ilike.%${q}%,zwoop_id.ilike.%${q}%`)
       .limit(20)
 
+    if (error) setError(error.message)
     setResults(data || [])
     setLoading(false)
   }
@@ -61,7 +64,9 @@ export default function FindStudents() {
 
         {loading && <p className="flex items-center gap-2 text-sm text-[#6B7280]"><Loader2 size={16} className="animate-spin" /> Searching...</p>}
 
-        {!loading && searched && results.length === 0 && (
+        {error && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>}
+
+        {!loading && !error && searched && results.length === 0 && (
           <p className="text-sm text-[#6B7280]">No students found with that name or ID.</p>
         )}
 
@@ -78,7 +83,7 @@ export default function FindStudents() {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{r.name}</p>
                 <p className="truncate text-xs text-[#6B7280]">{r.course} · Year {r.year}</p>
-                <p className="truncate text-xs font-medium text-[#FF5A36]">ID: {r.zwoop_id}</p>
+                <p className="truncate text-xs font-medium text-[#FF5A36]">ID: {r.zwoop_id || 'not set yet'}</p>
               </div>
               {me && r.id !== me && <StartChatButton otherId={r.id} />}
             </div>

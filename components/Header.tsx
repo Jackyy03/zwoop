@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { Search, MapPin, ChevronRight, UserRound, Heart, MessageCircle, Plus } from 'lucide-react'
+import { Search, MapPin, ChevronRight, UserRound, Heart, MessageCircle, Plus, Users } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
 import { useChat } from '@/contexts/ChatContext'
 
@@ -67,6 +67,10 @@ export default function Header() {
         </form>
 
         <div className="flex shrink-0 items-center gap-3 sm:gap-5">
+          <Link href="/students" className="flex flex-col items-center gap-0.5 text-[#14161A] hover:text-[#FF5A36]">
+            <Users size={20} />
+            <span className="hidden text-xs font-medium sm:inline">Students</span>
+          </Link>
           <Link href="/messages" className="relative flex flex-col items-center gap-0.5 text-[#14161A] hover:text-[#FF5A36]">
             <MessageCircle size={20} />
             {unread > 0 && (
