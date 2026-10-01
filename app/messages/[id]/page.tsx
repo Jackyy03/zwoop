@@ -7,7 +7,7 @@ import Header from '@/components/Header'
 import { supabase } from '@/lib/supabaseClient'
 import { useChat } from '@/contexts/ChatContext'
 import { presenceInfo } from '@/lib/presence'
-import { ChevronLeft, Send, Loader2, Check, CheckCheck, Bell } from 'lucide-react'
+import { ChevronLeft, Send, Loader2, Check, CheckCheck, Bell, FileText, Lock } from 'lucide-react'
 
 type Message = {
   id: number
@@ -35,6 +35,11 @@ export default function Thread() {
   const [otherId, setOtherId] = useState<string | null>(null)
   const [other, setOther] = useState<any>(null)
   const [listing, setListing] = useState<any>(null)
+  const [isSeller, setIsSeller] = useState(false)
+  const [accessGrantedAt, setAccessGrantedAt] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [granting, setGranting] = useState(false)
+  const [grantError, setGrantError] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -42,7 +47,6 @@ export default function Thread() {
   const [askNotif, setAskNotif] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Mark the other person's messages as "seen"
   async function markRead(userId: string) {
     await supabase
       .from('messages')
@@ -65,13 +69,16 @@ export default function Thread() {
       const { data: convo } = await supabase.from('conversations').select('*').eq('id', id).maybeSingle()
       if (!convo) { setError('Chat not found'); setLoading(false); return }
 
+      setIsSeller(convo.seller_id === user.id)
+      setAccessGrantedAt(convo.access_granted_at)
+
       const theirId = convo.buyer_id === user.id ? convo.seller_id : convo.buyer_id
       setOtherId(theirId)
       const { data: otherProfile } = await supabase.from('public_profiles').select('*').eq('id', theirId).maybeSingle()
       setOther(otherProfile || { name: 'Zwoop student' })
 
       if (convo.listing_id) {
-        const { data: l } = await supabase.from('listings').select('id, title, price').eq('id', convo.listing_id).maybeSingle()
+        const { data: l } = await supabase.from('listings').select('id, title, price, document_url').eq('id', convo.listing_id).maybeSingle()
         setListing(l)
       }
 
@@ -100,6 +107,13 @@ export default function Thread() {
             setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, read_at: m.read_at } : x)))
           }
         )
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'conversations', filter: `id=eq.${id}` },
+          (payload) => {
+            setAccessGrantedAt((payload.new as any).access_granted_at)
+          }
+        )
         .subscribe()
     }
 
@@ -107,7 +121,6 @@ export default function Thread() {
     return () => { if (channel) supabase.removeChannel(channel) }
   }, [id, router])
 
-  // If the tab was in the background, mark as seen when they come back to it
   useEffect(() => {
     function onVisible() {
       if (document.visibilityState === 'visible' && me) markRead(me)
@@ -116,7 +129,6 @@ export default function Thread() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [me, id])
 
-  // Keep "Active now / Last seen" fresh
   useEffect(() => {
     if (!otherId) return
     const timer = setInterval(async () => {
@@ -126,7 +138,6 @@ export default function Thread() {
     return () => clearInterval(timer)
   }, [otherId])
 
-  // Ask about notifications, only once per device
   useEffect(() => {
     if (typeof window === 'undefined' || typeof Notification === 'undefined') return
     if (Notification.permission === 'default' && !localStorage.getItem('zwoop_notif_asked')) {
@@ -175,6 +186,16 @@ export default function Thread() {
       .eq('id', id)
   }
 
+  async function handleGrantAccess() {
+    setGranting(true)
+    setGrantError('')
+    const { error } = await supabase.rpc('grant_document_access', { convo_id: id })
+    if (error) { setGrantError(error.message); setGranting(false); return }
+    setAccessGrantedAt(new Date().toISOString())
+    setGranting(false)
+    setConfirmOpen(false)
+  }
+
   const presence = presenceInfo(other?.last_seen_at)
   const lastMine = [...messages].reverse().find((m) => m.sender_id === me)
 
@@ -217,11 +238,35 @@ export default function Thread() {
               </div>
 
               {listing && (
-                <Link href={`/marketplace/${listing.id}`} className="max-w-[35%] shrink-0 truncate rounded-full border border-[#E5E7EB] px-3 py-1 text-xs font-medium text-[#FF5A36]">
+                <Link href={`/marketplace/${listing.id}`} className="max-w-[30%] shrink-0 truncate rounded-full border border-[#E5E7EB] px-3 py-1 text-xs font-medium text-[#FF5A36]">
                   {listing.title}
                 </Link>
               )}
             </div>
+
+            {listing?.document_url && (
+              <div className="flex items-center justify-between gap-3 border-b border-[#E5E7EB] bg-[#F7F7F9] px-4 py-2.5">
+                <span className="flex items-center gap-2 text-xs font-medium text-[#14161A]">
+                  <FileText size={15} className="text-[#FF5A36]" /> This item has an attached document
+                </span>
+
+                {isSeller ? (
+                  accessGrantedAt ? (
+                    <span className="shrink-0 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">Access granted</span>
+                  ) : (
+                    <button onClick={() => setConfirmOpen(true)} className="shrink-0 rounded-full bg-[#FF5A36] px-4 py-1.5 text-xs font-semibold text-white">
+                      Sell
+                    </button>
+                  )
+                ) : accessGrantedAt ? (
+                  <a href={listing.document_url} target="_blank" className="shrink-0 rounded-full bg-green-600 px-4 py-1.5 text-xs font-semibold text-white">
+                    View document
+                  </a>
+                ) : (
+                  <span className="flex shrink-0 items-center gap-1 text-xs text-[#6B7280]"><Lock size={12} /> Not shared yet</span>
+                )}
+              </div>
+            )}
 
             {askNotif && (
               <div className="flex items-center gap-3 border-b border-[#E5E7EB] bg-[#F7F7F9] px-4 py-3">
@@ -281,6 +326,26 @@ export default function Thread() {
           </>
         )}
       </div>
+
+      {confirmOpen && (
+        <div onClick={() => !granting && setConfirmOpen(false)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-white p-6">
+            <h3 className="text-lg font-bold">Give access?</h3>
+            <p className="mt-2 text-sm text-[#6B7280]">
+              Do you really want to give {other?.name} access to this document? They'll be able to view and download it right away.
+            </p>
+            {grantError && <p className="mt-3 text-sm text-red-600">{grantError}</p>}
+            <div className="mt-5 flex gap-2">
+              <button onClick={handleGrantAccess} disabled={granting} className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#FF5A36] py-2.5 text-sm font-semibold text-white disabled:opacity-70">
+                {granting ? <Loader2 size={15} className="animate-spin" /> : null} Yes, give access
+              </button>
+              <button onClick={() => setConfirmOpen(false)} disabled={granting} className="flex-1 rounded-full border border-[#E5E7EB] py-2.5 text-sm font-semibold">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
