@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
 import { supabase } from '@/lib/supabaseClient'
 import {
-  LayoutDashboard, ShoppingBag, Home as HomeIcon, Bike, CalendarDays, Image as ImageIcon, Users, FileBarChart, Upload, X, Video, AlertCircle,
+  LayoutDashboard, ShoppingBag, Home as HomeIcon, Bike, CalendarDays, Image as ImageIcon, Users, FileBarChart, Upload, X, Video, AlertCircle, FileText,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
@@ -13,9 +13,27 @@ const ADMIN_ID = '6a78cbff-de79-466f-9c81-9001252c3f5e'
 
 type FieldConfig = { key: string; label: string; type?: 'text' | 'number' | 'checkbox' | 'textarea' }
 
-const CRUD_TABS = [
-  { key: 'listings', label: 'Listings', icon: ShoppingBag, table: 'listings', titleField: 'title', subField: 'location_text',
-    imageMode: 'gallery', imagesTable: 'listing_images', imagesFk: 'listing_id', hasVideo: true,
+type TabConfig = {
+  key: string
+  label: string
+  icon: any
+  table: string
+  titleField: string
+  subField: string
+  fields: FieldConfig[]
+  hasImage?: boolean
+  hasVideo?: boolean
+  hasDocument?: boolean
+  imageMode?: string
+  imagesTable?: string
+  imagesFk?: string
+  geocodeFrom?: string
+}
+
+const CRUD_TABS: TabConfig[] = [
+  {
+    key: 'listings', label: 'Listings', icon: ShoppingBag, table: 'listings', titleField: 'title', subField: 'location_text',
+    imageMode: 'gallery', imagesTable: 'listing_images', imagesFk: 'listing_id', hasVideo: true, hasDocument: true,
     fields: [
       { key: 'title', label: 'Title' },
       { key: 'category', label: 'Category' },
@@ -23,8 +41,10 @@ const CRUD_TABS = [
       { key: 'condition', label: 'Condition' },
       { key: 'description', label: 'Description', type: 'textarea' },
       { key: 'location_text', label: 'Location' },
-    ] as FieldConfig[] },
-  { key: 'pg', label: 'PG & Hostels', icon: HomeIcon, table: 'pg_listings', titleField: 'name', subField: 'location_text',
+    ],
+  },
+  {
+    key: 'pg', label: 'PG & Hostels', icon: HomeIcon, table: 'pg_listings', titleField: 'name', subField: 'location_text',
     imageMode: 'gallery', imagesTable: 'pg_images', imagesFk: 'pg_id', hasVideo: true,
     fields: [
       { key: 'name', label: 'Name' },
@@ -35,8 +55,10 @@ const CRUD_TABS = [
       { key: 'facilities', label: 'Facilities (comma separated)' },
       { key: 'location_text', label: 'Location' },
       { key: 'phone', label: 'Phone' },
-    ] as FieldConfig[] },
-  { key: 'bikes', label: 'Bike Rentals', icon: Bike, table: 'bike_listings', titleField: 'vehicle_type', subField: 'provider_name',
+    ],
+  },
+  {
+    key: 'bikes', label: 'Bike Rentals', icon: Bike, table: 'bike_listings', titleField: 'vehicle_type', subField: 'provider_name',
     imageMode: 'gallery', imagesTable: 'bike_images', imagesFk: 'bike_id', hasVideo: true,
     fields: [
       { key: 'vehicle_type', label: 'Vehicle type' },
@@ -44,8 +66,11 @@ const CRUD_TABS = [
       { key: 'provider_name', label: 'Provider name' },
       { key: 'phone', label: 'Phone' },
       { key: 'location_text', label: 'Location' },
-    ] as FieldConfig[] },
-  { key: 'events', label: 'Events', icon: CalendarDays, table: 'events', titleField: 'title', subField: 'venue', hasImage: true, hasVideo: true, geocodeFrom: 'venue',
+    ],
+  },
+  {
+    key: 'events', label: 'Events', icon: CalendarDays, table: 'events', titleField: 'title', subField: 'venue',
+    hasImage: true, hasVideo: true, geocodeFrom: 'venue',
     fields: [
       { key: 'title', label: 'Title' },
       { key: 'description', label: 'Description', type: 'textarea' },
@@ -55,15 +80,18 @@ const CRUD_TABS = [
       { key: 'event_time', label: 'Time (e.g. 7:00 PM)' },
       { key: 'price_info', label: 'Price info (e.g. ₹200 or Free)' },
       { key: 'organizer_phone', label: 'Organizer phone (for WhatsApp registration)' },
-    ] as FieldConfig[] },
-  { key: 'banners', label: 'Banners', icon: ImageIcon, table: 'banners', titleField: 'title', subField: 'link_url', hasImage: true,
+    ],
+  },
+  {
+    key: 'banners', label: 'Banners', icon: ImageIcon, table: 'banners', titleField: 'title', subField: 'link_url', hasImage: true,
     fields: [
       { key: 'title', label: 'Title' },
       { key: 'subtitle', label: 'Subtitle' },
       { key: 'link_url', label: 'Link (e.g. /bikes)' },
       { key: 'bg_color', label: 'Background color (e.g. #14161A)' },
       { key: 'sort_order', label: 'Order (1, 2, 3...)', type: 'number' },
-    ] as FieldConfig[] },
+    ],
+  },
 ]
 
 const NAV = [
@@ -135,10 +163,7 @@ export default function AdminPage() {
           {activeTab === 'overview' && <OverviewPanel onGoToListings={() => setActiveTab('listings')} />}
           {activeTab === 'users' && <UsersPanel />}
           {activeTab === 'reports' && <ReportsPanel />}
-          {crudTab && (() => {
-            const { key, icon, ...sectionProps } = crudTab
-            return <AdminSection key={key} {...sectionProps} />
-          })()}
+          {crudTab && <AdminSection key={crudTab.key} config={crudTab} />}
         </div>
       </div>
     </main>
@@ -336,14 +361,9 @@ function ReportsPanel() {
 
 type GalleryItem = { url?: string; file?: File; preview?: string }
 
-function AdminSection({
-  table, titleField, subField, fields, hasImage, hasVideo, imageMode, imagesTable, imagesFk, geocodeFrom,
-}: {
-  table: string; titleField: string; subField: string; fields: FieldConfig[]
-  hasImage?: boolean; hasVideo?: boolean
-  imageMode?: string; imagesTable?: string; imagesFk?: string
-  geocodeFrom?: string
-}) {
+function AdminSection({ config }: { config: TabConfig }) {
+  const { table, titleField, subField, fields, hasImage, hasVideo, hasDocument, imageMode, imagesTable, imagesFk, geocodeFrom } = config
+
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -351,6 +371,8 @@ function AdminSection({
   const [formData, setFormData] = useState<any>({})
   const [file, setFile] = useState<File | null>(null)
   const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [docFile, setDocFile] = useState<File | null>(null)
+  const [existingDocUrl, setExistingDocUrl] = useState('')
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([])
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -375,13 +397,15 @@ function AdminSection({
   }
 
   function startAdd() {
-    setFormData(blankForm()); setEditingId(null); setFile(null); setVideoFile(null); setGalleryItems([]); setMessage(''); setShowForm(true)
+    setFormData(blankForm()); setEditingId(null); setFile(null); setVideoFile(null); setDocFile(null); setExistingDocUrl(''); setGalleryItems([]); setMessage(''); setShowForm(true)
   }
 
   async function startEdit(row: any) {
     const data: any = {}
     fields.forEach((f) => { data[f.key] = row[f.key] })
-    setFormData(data); setEditingId(row.id); setFile(null); setVideoFile(null); setMessage('')
+    setFormData(data); setEditingId(row.id); setFile(null); setVideoFile(null); setDocFile(null)
+    setExistingDocUrl(row.document_url || '')
+    setMessage('')
 
     if (imageMode === 'gallery' && imagesTable && imagesFk) {
       const { data: imgs } = await supabase.from(imagesTable).select('url').eq(imagesFk, row.id).order('sort_order')
@@ -465,6 +489,19 @@ function AdminSection({
       if (uploadError) { setMessage('Video upload failed: ' + uploadError.message); setSaving(false); return }
       const { data: urlData } = supabase.storage.from('listing-images').getPublicUrl(fileName)
       payload.video_url = urlData.publicUrl
+    }
+
+    if (hasDocument) {
+      if (docFile) {
+        const safeName = docFile.name.replace(/[^a-zA-Z0-9.]/g, '_')
+        const fileName = `${table}-doc-${Date.now()}-${safeName}`
+        const { error: uploadError } = await supabase.storage.from('listing-images').upload(fileName, docFile)
+        if (uploadError) { setMessage('Document upload failed: ' + uploadError.message); setSaving(false); return }
+        const { data: urlData } = supabase.storage.from('listing-images').getPublicUrl(fileName)
+        payload.document_url = urlData.publicUrl
+      } else if (editingId) {
+        payload.document_url = existingDocUrl
+      }
     }
 
     let rowId = editingId
@@ -601,6 +638,23 @@ function AdminSection({
             </div>
           )}
 
+          {hasDocument && (
+            <div>
+              <p className="mb-1 text-sm font-semibold">Document</p>
+              {existingDocUrl && !docFile && (
+                <a href={existingDocUrl} target="_blank" className="mb-2 flex items-center gap-2 rounded-lg border border-[#E5E7EB] p-2.5 text-sm hover:border-[#FF5A36]">
+                  <FileText size={16} className="text-[#FF5A36]" /> Current document — click to view
+                </a>
+              )}
+              <label className="flex h-20 w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#E5E7EB] text-center hover:border-[#FF5A36]">
+                <Upload size={16} className="text-[#FF5A36]" />
+                <span className="text-xs font-semibold text-[#FF5A36]">{existingDocUrl ? 'Replace document' : 'Add document'}</span>
+                <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setDocFile(e.target.files?.[0] || null)} className="hidden" />
+              </label>
+              {docFile && <p className="mt-1 text-xs text-[#6B7280]">Selected: {docFile.name}</p>}
+            </div>
+          )}
+
           {geocodeFrom && (
             <p className="text-xs text-[#6B7280]">📍 We'll automatically look up the map location from the {geocodeFrom} field above when you save.</p>
           )}
@@ -622,7 +676,9 @@ function AdminSection({
             <div key={row.id} className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3 ${row.status === 'pending' ? 'border-[#FF5A36] bg-[#FFF7F5]' : 'border-[#E5E7EB]'}`}>
               <div>
                 <p className="text-sm font-semibold">{row[titleField]}</p>
-                <p className="text-xs text-[#6B7280]">{row[subField]} · status: {row.status}</p>
+                <p className="text-xs text-[#6B7280]">
+                  {row[subField]} · status: {row.status}{row.document_url ? ' · has document' : ''}
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => openView(row)} className="rounded-full border border-[#E5E7EB] px-4 py-1 text-xs font-semibold">View</button>
@@ -665,7 +721,7 @@ function AdminSection({
 
             {viewingRow.document_url && (
               <a href={viewingRow.document_url} target="_blank" className="mb-4 flex items-center gap-2 rounded-lg border border-[#E5E7EB] p-3 text-sm font-medium hover:border-[#FF5A36]">
-                📄 View attached document
+                <FileText size={16} className="text-[#FF5A36]" /> View attached document
               </a>
             )}
 
