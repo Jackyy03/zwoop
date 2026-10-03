@@ -1,7 +1,7 @@
 import Header from '@/components/Header'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
-import { ShieldCheck, ChevronLeft } from 'lucide-react'
+import { ShieldCheck, ChevronLeft, FileText } from 'lucide-react'
 import SaveButton from '@/components/SaveButton'
 import ProductGallery from '@/components/ProductGallery'
 import MessageSellerButton from '@/components/MessageSellerButton'
@@ -61,9 +61,15 @@ export default async function ListingDetail({ params }: { params: Promise<{ id: 
             <p className="mt-3 text-2xl font-extrabold">₹{listing.price}</p>
             <p className="mt-1 text-sm text-[#6B7280]">{listing.condition} · {timeAgo(listing.created_at)}</p>
 
+            {listing.document_url && (
+              <a href={listing.document_url} target="_blank" className="mt-3 flex items-center gap-2 rounded-xl border border-[#E5E7EB] p-3 text-sm font-medium hover:border-[#FF5A36]">
+                <FileText size={18} className="text-[#FF5A36]" /> View attached document
+              </a>
+            )}
+
             <div className="my-5 border-t border-[#E5E7EB]" />
 
-            <div className="flex items-center gap-3">
+            <Link href={`/students/${listing.seller_id}`} className="flex items-center gap-3 hover:opacity-80">
               {seller?.avatar_url ? (
                 <img src={seller.avatar_url} alt={seller.name} className="h-11 w-11 rounded-full object-cover" />
               ) : (
@@ -76,7 +82,7 @@ export default async function ListingDetail({ params }: { params: Promise<{ id: 
                 <p className="text-xs text-[#6B7280]">{seller?.course} · Your College</p>
                 <p className="flex items-center gap-1 text-xs font-medium text-green-700"><ShieldCheck size={12} /> Student verified</p>
               </div>
-            </div>
+            </Link>
 
             <div className="mt-5 flex flex-wrap items-start gap-3">
               <MessageSellerButton sellerId={listing.seller_id} listingId={listing.id} />

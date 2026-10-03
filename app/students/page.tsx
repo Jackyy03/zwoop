@@ -5,6 +5,7 @@ import Header from '@/components/Header'
 import { supabase } from '@/lib/supabaseClient'
 import StartChatButton from '@/components/StartChatButton'
 import { Search, Loader2 } from 'lucide-react'
+import Link from 'next/link'
 
 function initialsFor(name: string) {
   if (!name) return '?'
@@ -73,18 +74,21 @@ export default function FindStudents() {
         <div className="flex flex-col gap-3">
           {results.map((r) => (
             <div key={r.id} className="flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white p-4">
-              {r.avatar_url ? (
-                <img src={r.avatar_url} alt={r.name} className="h-12 w-12 rounded-full object-cover" />
-              ) : (
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#EDEBFB] text-sm font-bold text-[#4F46E5]">
-                  {initialsFor(r.name)}
+
+              <Link href={`/students/${r.id}`} className="flex min-w-0 flex-1 items-center gap-3 hover:opacity-80">
+                {r.avatar_url ? (
+                  <img src={r.avatar_url} alt={r.name} className="h-12 w-12 rounded-full object-cover" />
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#EDEBFB] text-sm font-bold text-[#4F46E5]">
+                    {initialsFor(r.name)}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{r.name}</p>
+                  <p className="truncate text-xs text-[#6B7280]">{r.course} · Year {r.year}</p>
+                  <p className="truncate text-xs font-medium text-[#FF5A36]">ID: {r.zwoop_id || 'not set yet'}</p>
                 </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{r.name}</p>
-                <p className="truncate text-xs text-[#6B7280]">{r.course} · Year {r.year}</p>
-                <p className="truncate text-xs font-medium text-[#FF5A36]">ID: {r.zwoop_id || 'not set yet'}</p>
-              </div>
+              </Link>
               {me && r.id !== me && <StartChatButton otherId={r.id} />}
             </div>
           ))}

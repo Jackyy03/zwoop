@@ -45,9 +45,10 @@ const CRUD_TABS: TabConfig[] = [
   },
   {
     key: 'pg', label: 'PG & Hostels', icon: HomeIcon, table: 'pg_listings', titleField: 'name', subField: 'location_text',
-    imageMode: 'gallery', imagesTable: 'pg_images', imagesFk: 'pg_id', hasVideo: true,
+    imageMode: 'gallery', imagesTable: 'pg_images', imagesFk: 'pg_id', hasVideo: true, geocodeFrom: 'location_text',
     fields: [
       { key: 'name', label: 'Name' },
+      { key: 'owner_name', label: 'Owner name' },
       { key: 'rent', label: 'Rent (per month)', type: 'number' },
       { key: 'distance_km', label: 'Distance (e.g. 1.2 km from college)' },
       { key: 'room_type', label: 'Room type' },
@@ -59,7 +60,7 @@ const CRUD_TABS: TabConfig[] = [
   },
   {
     key: 'bikes', label: 'Bike Rentals', icon: Bike, table: 'bike_listings', titleField: 'vehicle_type', subField: 'provider_name',
-    imageMode: 'gallery', imagesTable: 'bike_images', imagesFk: 'bike_id', hasVideo: true,
+    imageMode: 'gallery', imagesTable: 'bike_images', imagesFk: 'bike_id', hasVideo: true, geocodeFrom: 'location_text',
     fields: [
       { key: 'vehicle_type', label: 'Vehicle type' },
       { key: 'price_per_day', label: 'Price per day', type: 'number' },
